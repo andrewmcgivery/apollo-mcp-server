@@ -54,5 +54,29 @@ jobs:
               with:
                   target: ${{ matrix.target }}
 
+            - name: Install musl tools (Linux)
+              if: runner.os == 'Linux' && contains(matrix.target, 'musl')
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y musl-tools
+
+            - name: Configure linker for musl (aarch64)
+              if: matrix.target == 'aarch64-unknown-linux-musl'
+              run: |
+                  mkdir -p .cargo
+                  cat >> .cargo/config.toml << EOF
+                  [target.aarch64-unknown-linux-musl]
+                  linker = "musl-gcc"
+                  EOF
+
+            - name: Configure linker for musl (x86_64)
+              if: matrix.target == 'x86_64-unknown-linux-musl'
+              run: |
+                  mkdir -p .cargo
+                  cat >> .cargo/config.toml << EOF
+                  [target.x86_64-unknown-linux-musl]
+                  linker = "musl-gcc"
+                  EOF
+
             - name: Build
               run: cargo build --release --target ${{ matrix.target }}
