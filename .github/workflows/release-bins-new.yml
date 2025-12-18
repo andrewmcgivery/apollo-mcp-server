@@ -1,0 +1,58 @@
+name: Build Release Binaries (new)
+
+on:
+    #     push:
+    #         tags:
+    #             - "v[0-9]+.[0-9]+.[0-9]+"
+    #             - "v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
+    workflow_dispatch:
+        # inputs:
+        #     version:
+        #         description: Version to publish
+        #         required: true
+        #         type: string
+
+defaults:
+    run:
+        # necessary for windows
+        shell: bash
+
+jobs:
+    build-artifacts:
+        strategy:
+            matrix:
+                include:
+                    - target: aarch64-apple-darwin
+                      os: macos-latest
+                    - target: aarch64-pc-windows-msvc
+                      os: windows-11-arm
+                    - target: aarch64-unknown-linux-gnu
+                      os: ubuntu-24.04-arm
+                    - target: aarch64-unknown-linux-musl
+                      os: ubuntu-24.04-arm
+                    - target: x86_64-apple-darwin
+                      os: macos-15-intel
+                    - target: x86_64-pc-windows-msvc
+                      os: windows-latest
+                    - target: x86_64-unknown-linux-gnu
+                      os: ubuntu-latest
+                    - target: x86_64-unknown-linux-musl
+                      os: ubuntu-latest
+        runs-on: ${{ matrix.os }}
+        permissions:
+            contents: read
+            id-token: write
+        env:
+            archive_name: artifact
+            package_name: apollo-mcp-server
+        steps:
+            - uses: actions/checkout@v4
+              # with:
+              #   ref: ${{ needs.prepare-release.outputs.sha }}
+
+            - uses: actions-rust-lang/setup-rust-toolchain@v1
+              with:
+                  target: ${{ matrix.target }}
+
+            - name: Build
+              run: cargo build --release --target ${{ matrix.target }}
