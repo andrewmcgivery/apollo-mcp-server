@@ -2,14 +2,15 @@ name: Prepare Release (new)
 
 on: workflow_dispatch
 
+permissions:
+    contents: write
+    pull-requests: write
+    issues: write
+    id-token: write
+
 jobs:
     prepare-release:
         runs-on: ubuntu-latest
-        permissions:
-            contents: write
-            pull-requests: write
-            issues: read
-            id-token: write
         steps:
             - uses: actions/checkout@v4
 
