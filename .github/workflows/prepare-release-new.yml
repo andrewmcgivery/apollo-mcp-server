@@ -18,6 +18,8 @@ jobs:
                   version: 0.21.7
 
             - run: knope prepare-release --verbose
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
             - name: "test"
               run: git branch --show-current
