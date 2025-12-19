@@ -32,7 +32,6 @@ jobs:
         run: echo "version=$(knope get-version)" >> $GITHUB_OUTPUT
 
   build-artifacts:
-    if: github.head_ref == 'release' && github.event.pull_request.merged == true
     needs: [get-version]
     strategy:
       matrix:
@@ -159,12 +158,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.1.7
+        with:
+          ref: ${{ github.ref }}
       - uses: actions/download-artifact@v4.1.8
         with:
           path: artifacts
           merge-multiple: true
-      - name: "testing"
-        run: ls -R
 
       - name: Configure Git
         run: |
