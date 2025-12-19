@@ -3,7 +3,8 @@ name: Build Release Binaries (new)
 on:
   pull_request:
     types: [closed]
-    branches: [main]
+    branches:
+      - main
   # TODO: For debugging purposes, probably remove
   workflow_dispatch:
 
@@ -16,7 +17,7 @@ defaults:
 
 jobs:
   get-version:
-    if: github.head_ref == 'release' && github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.store-version.outputs.version }}
@@ -122,7 +123,7 @@ jobs:
           if-no-files-found: error
 
   generate-config-schema:
-    if: github.head_ref == 'release' && github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
