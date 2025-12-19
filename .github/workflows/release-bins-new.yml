@@ -1,27 +1,39 @@
 name: Build Release Binaries (new)
 
 on:
-  push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      - "v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+"
+  pull_request:
+    types: [closed]
+    branches: [main]
+  # TODO: For debugging purposes, probably remove
   workflow_dispatch:
-    inputs:
-      version:
-        description: Version to publish
-        required: true
-        type: string
-
-env:
-  VERSION: ${{ inputs.version || github.ref_name }}
 
 defaults:
   run:
     # necessary for windows
     shell: bash
 
+# TODO: Have ability to pass in a version from another job (experimental releases) that oversides the version number throughout this file
+
 jobs:
+  get-version:
+    if: github.head_ref == 'release' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.store-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - uses: knope-dev/action@v2.1.0
+        with:
+          version: 0.21.5
+      - name: Store version
+        id: store-version
+        run: echo "version=$(knope get-version)" >> $GITHUB_OUTPUT
+
   build-artifacts:
+    if: github.head_ref == 'release' && github.event.pull_request.merged == true
+    needs: [get-version]
     strategy:
       matrix:
         include:
@@ -42,6 +54,7 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}
     permissions:
       contents: write
       packages: write
@@ -100,16 +113,17 @@ jobs:
         run: cp target/${{ matrix.target }}/release/${{ env.package_name }}.exe ${{ env.archive_name }}
 
       - name: Create Tar Archive
-        run: tar -czf ${{ env.package_name }}-${{ env.VERSION }}-${{ matrix.target }}.tgz ${{ env.archive_name }}
+        run: tar -czf ${{ env.package_name }}-${{ needs.get-version.outputs.version }}-${{ matrix.target }}.tgz ${{ env.archive_name }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4.4.0
         with:
           name: ${{ matrix.target }}
-          path: ${{ env.package_name }}-${{ env.VERSION }}-${{ matrix.target }}.tgz
+          path: ${{ env.package_name }}-${{ needs.get-version.outputs.version }}-${{ matrix.target }}.tgz
           if-no-files-found: error
 
   generate-config-schema:
+    if: github.head_ref == 'release' && github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -132,7 +146,7 @@ jobs:
         run: mkdir ${{ env.archive_name }}
 
       - name: Generate config schema
-        run: cargo run --release -p apollo-mcp-server --bin config-schema > ${{ env.archive_name }}/config.schema.json
+        run: cargo run -p apollo-mcp-server --bin config-schema > ${{ env.archive_name }}/config.schema.json
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4.4.0
@@ -151,3 +165,16 @@ jobs:
           merge-multiple: true
       - name: "testing"
         run: ls -R
+
+      - name: Configure Git
+        run: |
+          git config --global user.name GitHub Actions
+          git config user.email github-actions@github.com
+
+      - uses: knope-dev/action@v2.1.0
+        with:
+          version: 0.21.5
+
+      - run: knope release --dryrun
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
