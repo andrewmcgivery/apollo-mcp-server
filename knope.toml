@@ -51,5 +51,5 @@ type = "Command"
 command = "echo \"$version\""
 
 [github]
-owner = "apollo-mcp-server"
-repo = "andrewmcgivery"
+owner = "andrewmcgivery"
+repo = "apollo-mcp-server"
