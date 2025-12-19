@@ -20,11 +20,3 @@ jobs:
             - run: knope prepare-release --verbose
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: "test"
-              run: git branch --show-current
-
-            # - name: Update install script versions
-            #   run: |
-            #       sed -i 's/^PACKAGE_VERSION=".*"$/PACKAGE_VERSION="v${{ inputs.version }}"/' scripts/nix/install.sh
-            #       sed -i "s/^\$package_version = '.*'$/\$package_version = 'v${{ inputs.version }}'/" scripts/windows/install.ps1
