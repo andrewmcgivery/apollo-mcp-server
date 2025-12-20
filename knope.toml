@@ -6,6 +6,7 @@ versioned_files = [
     { path = "scripts/windows/install.ps1", regex = "\\$package_version = 'v(?<version>\\d+\\.\\d+\\.\\d+)'" },
     { path = "docs/source/run.mdx", regex = "(^|[^\\w.-])v?(?<version>\\d+\\.\\d+\\.\\d+)([^\\w.]|$)" }
 ]
+changelog = "CHANGELOG.md"
 assets = "artifacts/*"
 
 [[workflows]]
