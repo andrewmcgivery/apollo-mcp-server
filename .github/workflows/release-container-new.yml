@@ -1,0 +1,153 @@
+name: Build Release Container (New)
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish (e.g., 1.2.1)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      version:
+        description: Version to publish (e.g., 1.2.1-experimental.1)
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  FQDN: ghcr.io/${{ github.repository }}
+
+jobs:
+  get-version:
+    # Run on PR merge from release branch, workflow_dispatch, or workflow_call
+    if: (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release') || inputs.version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.store-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+      - uses: knope-dev/action@v2.1.0
+        if: ${{ !inputs.version }}
+        with:
+          version: 0.21.5
+      - name: Store version
+        id: store-version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=v${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=v$(knope get-version)" >> $GITHUB_OUTPUT
+          fi
+
+  # Build a container for x86_64 and aarch64 linux
+  build:
+    name: Release Container
+    needs: get-version
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: amd64
+            platform: linux/amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            platform: linux/arm64
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.get-version.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get commit timestamp
+        id: timestamp
+        run: |
+          echo "created=$(git log -1 --format='%aI')" >> $GITHUB_OUTPUT
+
+      - name: Build and push container
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ env.FQDN }}:${{ env.VERSION }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.created=${{ steps.timestamp.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Use reproducible timestamps matching Nix behavior
+          build-args: |
+            SOURCE_DATE_EPOCH=${{ github.event.repository.pushed_at }}
+
+      - name: Get image digest
+        id: digest
+        run: |
+          echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.FQDN }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+  bundle:
+    name: Bundle into multiarch container
+    needs: [get-version, build]
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.get-version.outputs.version }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Log in to the Container registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create multiarch manifest
+        run: |
+          docker manifest create $FQDN:$VERSION $FQDN:$VERSION-amd64 $FQDN:$VERSION-arm64
+          docker manifest annotate $FQDN:$VERSION $FQDN:$VERSION-amd64 --arch amd64
+          docker manifest annotate $FQDN:$VERSION $FQDN:$VERSION-arm64 --arch arm64
+
+          docker manifest create $FQDN:latest $FQDN:$VERSION-amd64 $FQDN:$VERSION-arm64
+          docker manifest annotate $FQDN:latest $FQDN:$VERSION-amd64 --arch amd64
+          docker manifest annotate $FQDN:latest $FQDN:$VERSION-arm64 --arch arm64
+      - name: Push the multiarch manifests
+        shell: bash
+        run: |
+          docker manifest push $FQDN:$VERSION
+
+          # push :latest only if version DOES NOT start with canary OR end with -rc.<digits>
+          if [[ ! "$VERSION" =~ (^canary|-rc\.[0-9]+$) ]]; then
+            docker manifest push $FQDN:latest
+          fi
