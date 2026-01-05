@@ -2,9 +2,9 @@
 versioned_files = [
     "Cargo.toml", 
     { path = "Cargo.lock", dependency = "apollo-mcp-server" },
-    { path = "scripts/nix/install.sh", regex = "PACKAGE_VERSION=\"v(?<version>\\d+\\.\\d+\\.\\d+)\"" },
-    { path = "scripts/windows/install.ps1", regex = "\\$package_version = 'v(?<version>\\d+\\.\\d+\\.\\d+)'" },
-    { path = "docs/source/run.mdx", regex = "(^|[^\\w.-])v?(?<version>\\d+\\.\\d+\\.\\d+)([^\\w.]|$)" }
+    { path = "scripts/nix/install.sh", regex = "PACKAGE_VERSION=\"v(?<version>\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?)\"" },
+    { path = "scripts/windows/install.ps1", regex = "\\$package_version = 'v(?<version>\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?)'" },
+    { path = "docs/source/run.mdx", regex = "(^|[^\\w.-])v?(?<version>\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?)([^\\w.]|$)" }
 ]
 changelog = "CHANGELOG.md"
 assets = "artifacts/*"
