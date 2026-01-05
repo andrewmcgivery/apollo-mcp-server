@@ -51,6 +51,25 @@ name = "get-version"
 type = "Command"
 command = "echo \"$version\""
 
+[[workflows]]
+name = "prepare-experimental-release"
+
+[[workflows.steps]]
+type = "Command"
+command = "git switch -c release-temp-$version"
+
+[[workflows.steps]]
+type = "PrepareRelease"
+ignore_conventional_commits = true
+
+[[workflows.steps]]
+type = "Command"
+command = "git commit -m \"chore: prepare experimental release $version\""
+
+[[workflows.steps]]
+type = "Command"
+command = "git push --force --set-upstream origin release-temp-$version"
+
 [github]
 owner = "andrewmcgivery"
 repo = "apollo-mcp-server"

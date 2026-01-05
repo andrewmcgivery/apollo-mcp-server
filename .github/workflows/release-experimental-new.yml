@@ -1,0 +1,86 @@
+name: Build Experimental Release Binaries
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: Version to publish (e.g., 1.2.1-experimental.1)
+                required: true
+                type: string
+            features:
+                description: Cargo features (comma-separated, e.g., apps)
+                required: false
+                type: string
+
+env:
+    VERSION: ${{ inputs.version }}
+
+permissions:
+    contents: write
+    pull-requests: write
+    issues: write
+    id-token: write
+
+jobs:
+    validate:
+        name: Validate version format
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Validate experimental version pattern
+              run: |
+                  if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-experimental\.[0-9]+$'; then
+                    echo "Error: Version must match pattern: X.Y.Z-experimental.N"
+                    echo "Examples: 1.2.1-experimental.1, 2.0.0-experimental.3"
+                    echo "Provided: ${{ inputs.version }}"
+                    exit 1
+                  fi
+    prepare-release:
+        needs: [validate]
+        outputs:
+            release_commit: ${{ steps.get-commit.outputs.commit_sha }}
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Configure Git
+              run: |
+                  git config --global user.name GitHub Actions
+                  git config user.email github-actions@github.com
+
+            - uses: knope-dev/action@v2.1.0
+              with:
+                  version: 0.21.7
+
+            - run: knope prepare-experimental-release --override-version ${{ inputs.version }} --verbose
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Get Commit SHA
+              id: get-commit
+              run: |
+                  echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+    release-bins:
+        needs: [validate, prepare-release]
+        permissions:
+            contents: write
+            packages: write
+            attestations: write
+            id-token: write
+        uses: ./.github/workflows/release-bins-new.yml
+        with:
+            version: ${{ inputs.version }}
+            features: ${{ inputs.features }}
+            ref: ${{ needs.prepare-release.outputs.release_commit }}
+        secrets: inherit
+    cleanup:
+        name: Cleanup temporary branch
+        needs: [validate, prepare-release, release-bins]
+        runs-on: ubuntu-24.04
+        permissions:
+            contents: write
+        if: always()
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Delete temporary branch
+              run: |
+                  git push origin --delete release-temp-${{ inputs.version }} || true

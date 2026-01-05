@@ -5,32 +5,49 @@ on:
     types: [closed]
     branches:
       - main
-  # TODO: For debugging purposes, probably remove
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to publish (e.g., 1.2.1-experimental.1)
+        required: true
+        type: string
+      features:
+        description: Cargo features (comma-separated, e.g., apps)
+        required: false
+        type: string
+      ref:
+        description: Git ref to use for the built artifacts
+        required: false
+        type: string
 
 defaults:
   run:
     # necessary for windows
     shell: bash
 
-# TODO: Have ability to pass in a version from another job (experimental releases) that oversides the version number throughout this file
-
 jobs:
   get-version:
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
+    # Run on PR merge (original) or workflow_call (experimental)
+    if: (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release') || github.event_name == 'workflow_call'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.store-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.ref || github.ref }}
       - uses: knope-dev/action@v2.1.0
+        if: ${{ !inputs.version }}
         with:
           version: 0.21.5
       - name: Store version
         id: store-version
-        run: echo "version=$(knope get-version)" >> $GITHUB_OUTPUT
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(knope get-version)" >> $GITHUB_OUTPUT
+          fi
 
   build-artifacts:
     needs: [get-version]
@@ -66,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.ref || github.ref }}
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -97,9 +114,83 @@ jobs:
           EOF
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }} ${{ inputs.features && format('--features {0}', inputs.features) || '' }}
 
-      # TODO: Apple Signing
+      - name: Sign Apple Binary
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          MACOS_CERT_BUNDLE_PASSWORD=${{ secrets.MACOS_CERT_BUNDLE_PASSWORD }}
+          MACOS_CERT_BUNDLE_BASE64=${{ secrets.MACOS_CERT_BUNDLE_BASE64 }}
+          MACOS_KEYCHAIN_PASSWORD=${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          MACOS_NOTARIZATION_PASSWORD=${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+
+          APPLE_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}
+          APPLE_USERNAME=${{ secrets.APPLE_USERNAME }}
+
+          echo "Pre-check: Valid Codesigning Identify"
+          security find-identity -v -p codesigning
+          echo "Pre-check: Codesigning Identify"
+          security find-identity -p codesigning
+          echo "Pre-check: Any Identify"
+          security find-identity
+
+          echo "|||||||||||||||||||||||||||||||||||||||||||||"
+
+          VERSION=${{ needs.get-version.outputs.version }}
+          BINARY_PATH=target/${{ matrix.target }}/release/${{ env.package_name }}
+          ENTITLEMENTS_PATH="macos-entitlements.plist"
+
+          # Create a temporary keychain
+          KEYCHAIN_NAME="${{ env.package_name }}-keychain"
+          mkdir $KEYCHAIN_NAME
+          echo "Creating keychain..."
+          security create-keychain -p "${MACOS_KEYCHAIN_PASSWORD}" $KEYCHAIN_NAME
+          echo "Removing relock timeout on keychain..."
+          security set-keychain-settings $KEYCHAIN_NAME
+
+          echo "Decoding certificate bundle..."
+          echo "${MACOS_CERT_BUNDLE_BASE64}" | base64 --decode > $KEYCHAIN_NAME/certificate.p12
+
+          echo "Importing codesigning certificate to build keychain..."
+          security import $KEYCHAIN_NAME/certificate.p12 -k $KEYCHAIN_NAME -P "${MACOS_CERT_BUNDLE_PASSWORD}" -T /usr/bin/codesign
+
+          echo "Adding the codesign tool to the security partition-list..."
+          security set-key-partition-list -S "apple-tool:,apple:,codesign:" -s -k "${MACOS_KEYCHAIN_PASSWORD}" $KEYCHAIN_NAME
+
+          echo "Setting default keychain..."
+          security default-keychain -d user -s $KEYCHAIN_NAME
+
+          echo "Unlocking keychain..."
+          security unlock-keychain -p "${MACOS_KEYCHAIN_PASSWORD}" $KEYCHAIN_NAME
+
+          echo "Verifying keychain is set up correctly..."
+          security find-identity -v -p codesigning
+
+          echo "|||||||||||||||||||||||||||||||||||||||||||||"
+
+          echo "Post-check: Valid Codesigning Identify"
+          security find-identity -v -p codesigning
+          echo "Post-check: Codesigning Identify"
+          security find-identity -p codesigning
+          echo "Post-check: Any Identify"
+          security find-identity
+
+          echo "|||||||||||||||||||||||||||||||||||||||||||||"
+
+          # Sign the binary
+          echo "Signing code (step 1 of 2)..."
+          codesign --sign "$APPLE_TEAM_ID" --options runtime --entitlements $ENTITLEMENTS_PATH --force --timestamp "$BINARY_PATH" -v
+
+          echo "Signing code (step 2 of 2)..."
+          codesign -vvv --deep --strict "$BINARY_PATH"
+
+          echo "Zipping dist..."
+          mkdir "$KEYCHAIN_NAME/dist"
+          cp "$BINARY_PATH" "$KEYCHAIN_NAME/dist/${{ env.package_name }}"
+          zip -r "$KEYCHAIN_NAME/${{ env.package_name }}-$VERSION.zip" "$KEYCHAIN_NAME/dist"
+
+          echo "Beginning notarization process..."
+          xcrun notarytool submit "$KEYCHAIN_NAME/${{ env.package_name }}-$VERSION.zip" --apple-id "$APPLE_USERNAME" --password "$MACOS_NOTARIZATION_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait --timeout 20m
 
       - name: Create Archive Folder
         run: mkdir ${{ env.archive_name }}
@@ -123,7 +214,8 @@ jobs:
           if-no-files-found: error
 
   generate-config-schema:
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release'
+    # Run on PR merge (original) or workflow_call (experimental)
+    if: (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release') || github.event_name == 'workflow_call'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -136,11 +228,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.ref || github.ref }}
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          target: ${{ matrix.target }}
 
       - name: Create Archive Folder
         run: mkdir ${{ env.archive_name }}
@@ -160,7 +250,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4.1.7
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/download-artifact@v4.1.8
         with:
           path: artifacts
