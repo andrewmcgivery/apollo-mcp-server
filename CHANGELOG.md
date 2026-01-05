@@ -4,28 +4,6 @@ All notable changes to this project will be documented in this file.
 
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 1.4.0 (2026-01-05)
-
-### Features
-
-#### Add scope parameter to WWW-Authenticate header - @DaleSeo PR #523
-
-Add support for optional `scope` parameter in the `WWW-Authenticate` header per [MCP Auth Spec 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#protected-resource-metadata-discovery-requirements).
-
-When returning 401 Unauthorized responses, the server now includes the configured scopes to guide clients on appropriate scopes to request during authorization.
-
-This PR extends the `WwwAuthenticate::Bearer` variant with an optional scope field. When scopes are configured, they are space-separated and included in 401 responses. When no scopes are configured, the parameter is omitted.
-
-#### Server adds support for incoming distributed trace context propagation - @david-castaneda PR #484
-
-The MCP server now extracts W3C traceparent headers from incoming requests and uses this context for its own emitted traces, enabling handler spans to nest under parent traces for complete end-to-end observability.
-
-### Fixes
-
-#### ci: remove develop branch from CI triggers - @DaleSeo PR #530
-
-Remove the develop branch from the CI workflow as part of migrating from Git Flow to trunk-based development.
-
 ## 1.3.0 (2025-12-10)
 
 ### 🚀 Features
