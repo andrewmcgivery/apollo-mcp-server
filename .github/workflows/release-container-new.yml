@@ -96,6 +96,7 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ matrix.platform }}
           push: true
+          provenance: false
           tags: ${{ env.FQDN }}:${{ env.VERSION }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.created=${{ steps.timestamp.outputs.created }}
