@@ -97,7 +97,6 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Use reproducible timestamps matching Nix behavior
           build-args: |
             SOURCE_DATE_EPOCH=${{ steps.timestamp.outputs.epoch }}
 
