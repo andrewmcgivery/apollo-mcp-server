@@ -49,8 +49,7 @@ name = "get-version"
 
 [[workflows.steps]]
 type = "Command"
-command = "echo \"$NEW_VERSION\""
-shell=true
+command = "echo \"$version\""
 
 [[workflows]]
 name = "prepare-experimental-release"
