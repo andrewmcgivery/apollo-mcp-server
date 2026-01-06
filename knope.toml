@@ -49,14 +49,16 @@ name = "get-version"
 
 [[workflows.steps]]
 type = "Command"
-command = "echo \"$version\""
+command = "echo \"$NEW_VERSION\""
+shell=true
 
 [[workflows]]
 name = "prepare-experimental-release"
 
 [[workflows.steps]]
 type = "Command"
-command = "git switch -c release-temp-$version"
+command = "git switch -c release-temp-$NEW_VERSION-$GIT_RUN_ID"
+shell=true
 
 [[workflows.steps]]
 type = "PrepareRelease"
@@ -64,11 +66,13 @@ ignore_conventional_commits = true
 
 [[workflows.steps]]
 type = "Command"
-command = "git commit -m \"chore: prepare experimental release $version\""
+command = "git commit -m \"chore: prepare experimental release $NEW_VERSION\""
+shell=true
 
 [[workflows.steps]]
 type = "Command"
-command = "git push --force --set-upstream origin release-temp-$version"
+command = "git push --force --set-upstream origin release-temp-$NEW_VERSION-$GIT_RUN_ID"
+shell=true
 
 [github]
 owner = "andrewmcgivery"

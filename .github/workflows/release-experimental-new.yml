@@ -53,6 +53,8 @@ jobs:
             - run: knope prepare-experimental-release --override-version ${{ inputs.version }} --verbose
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  NEW_VERSION: ${{ inputs.version }}
+                  GIT_RUN_ID: ${{ github.run_id }}
 
             - name: Get Commit SHA
               id: get-commit
@@ -83,4 +85,4 @@ jobs:
 
             - name: Delete temporary branch
               run: |
-                  git push origin --delete release-temp-${{ inputs.version }} || true
+                  git push origin --delete release-temp-${{ inputs.version }}-${{ github.run_id }} || true
