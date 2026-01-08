@@ -60,6 +60,10 @@ jobs:
               id: get-commit
               run: |
                   echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+            - name: Test - Output Commit SHA
+              run: |
+                  echo "Commit SHA from output: ${{ steps.get-commit.outputs.commit_sha }}"
     # release-bins:
     #     needs: [validate, prepare-release]
     #     permissions:
