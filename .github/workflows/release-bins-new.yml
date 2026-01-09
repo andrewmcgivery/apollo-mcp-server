@@ -262,6 +262,9 @@ jobs:
           git config --global user.name GitHub Actions
           git config user.email github-actions@github.com
 
+      - name: Debug - Show install.sh contents
+        run: cat scripts/nix/install.sh
+
       - uses: knope-dev/action@v2.1.0
         with:
           version: 0.21.5
