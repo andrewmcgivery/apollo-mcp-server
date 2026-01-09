@@ -269,6 +269,6 @@ jobs:
         with:
           version: 0.21.5
 
-      - run: knope release --dry-run
+      - run: knope release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
