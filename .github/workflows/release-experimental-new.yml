@@ -35,8 +35,6 @@ jobs:
                   fi
     prepare-release:
         needs: [validate]
-        outputs:
-            release_commit: ${{ steps.get-commit.outputs.commit_sha }}
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -56,10 +54,6 @@ jobs:
                   NEW_VERSION: ${{ inputs.version }}
                   GIT_RUN_ID: ${{ github.run_id }}
 
-            - name: Get Commit SHA
-              id: get-commit
-              run: |
-                  echo "commit_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     release-bins:
         needs: [validate, prepare-release]
         permissions:
@@ -71,7 +65,7 @@ jobs:
         with:
             version: ${{ inputs.version }}
             features: ${{ inputs.features }}
-            ref: ${{ needs.prepare-release.outputs.release_commit }}
+            ref: release-temp-${{ inputs.version }}-${{ github.run_id }}
         secrets: inherit
     cleanup:
         name: Cleanup temporary branch
